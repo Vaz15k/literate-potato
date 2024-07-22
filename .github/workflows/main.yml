@@ -1,0 +1,114 @@
+name: Upload firmware images
+
+on:
+  workflow_dispatch:
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - model: "SM-A5460"
+            csc: "CHC"
+            omc: "CHC"
+          - model: "SM-A546B"
+            csc: "EUX"
+            omc: "OXM"
+          - model: "SM-A546U"
+            csc: "CCT"
+            omc: "OYN"
+          - model: "SM-A546U1"
+            csc: "XAA"
+            omc: "OYM"
+          - model: "SM-A546W"
+            csc: "XAC"
+            omc: "OYV"
+          - model: "SM-A546S"
+            csc: "SKC"
+            omc: "SKC"
+          - model: "SM-A546E"
+            csc: "ZTO"
+            omc: "OWO"
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Compare latest version with current version
+        run: |
+          need_update=0
+          latest=$(curl --retry 5 --retry-delay 5 http://fota-cloud-dn.ospserver.net/firmware/${{ matrix.csc }}/${{ matrix.model }}/version.xml | grep latest | sed 's/^[^>]*>//' | sed 's/<.*//')
+          current=$(cat current.${{ matrix.model }}_${{ matrix.omc }}) || need_update=1
+          [[ $latest != $current ]] && need_update=1
+          echo "latest_version=$latest" >> $GITHUB_ENV
+          echo "need_update=$need_update" >> $GITHUB_ENV
+
+      - name: Set up Node.js
+        if: env.need_update == 1
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'latest'
+
+      - name: Set up Python 3
+        if: env.need_update == 1
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        if: env.need_update == 1
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y liblz4-tool zip simg2img f2fs-tools git-lfs
+          sudo wget -O /usr/bin/samfirm https://github.com/DavidArsene/samfirm.js/releases/download/v0.3.0/samfirm.js && sudo chmod +x /usr/bin/samfirm
+
+      - name: Fetch firmware
+        if: env.need_update == 1
+        run: |
+          if [[ "${{ matrix.model }}" == "SM-A5460" ]]; then
+              imei="R5CW71BXYRV"
+          elif [[ "${{ matrix.model }}" == "SM-A546B" ]]; then
+              imei="350756481234568"
+          elif [[ "${{ matrix.model }}" == "SM-A546U" ]]; then
+              imei="356044291234563"
+          elif [[ "${{ matrix.model }}" == "SM-A546U1" ]]; then
+              imei="356642731234562"
+          elif [[ "${{ matrix.model }}" == "SM-A546W" ]]; then
+              imei="351617731234569"
+          elif [[ "${{ matrix.model }}" == "SM-A546S" ]]; then
+              imei="351992291234568"
+          elif [[ "${{ matrix.model }}" == "SM-A546E" ]]; then
+              imei="350090711234564"
+          fi
+          samfirm -m ${{ matrix.model }} -r ${{ matrix.csc }} -i $imei
+
+      - name: Get path of files
+        if: env.need_update == 1
+        run: |
+          echo "ap_tar=$(find -name 'AP*')" >> $GITHUB_ENV
+
+      - name: Extract images
+        if: env.need_update == 1
+        run: |
+          mkdir -p Imagens/${{ matrix.model }}
+          tar xvf ${{ env.ap_tar }} --wildcards '*.img.lz4'
+          for img in recovery boot init_boot; do
+            lz4 -d ${img}.img.lz4 ${img}.img
+            mv ${img}.img Imagens/${{ matrix.model }}
+            rm ${img}.img.lz4
+          done
+
+      - name: Upload images
+        if: env.need_update == 1
+        run: |
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git pull origin ${{github.ref}} --ff-only
+          git add Imagens/${{ matrix.model }}
+          git commit -m "Upload ${{matrix.model}} images"
+          git push origin ${{github.ref}}
