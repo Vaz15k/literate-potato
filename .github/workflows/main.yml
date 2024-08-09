@@ -32,6 +32,9 @@ jobs:
           - model: "SM-A546E"
             csc: "ZTO"
             omc: "OWO"
+          - model: "SM-A546V"
+            csc: "PCT"
+            omc: "OWA"
 
     steps:
       - name: Checkout repo
