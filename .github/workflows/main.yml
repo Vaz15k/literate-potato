@@ -32,6 +32,9 @@ jobs:
           - model: "SM-A546E"
             csc: "ZTO"
             omc: "OWO"
+          - model: "SM-A546V"
+            csc: "PCT"
+            omc: "OWA"
 
     steps:
       - name: Checkout repo
@@ -84,6 +87,8 @@ jobs:
               imei="351992291234568"
           elif [[ "${{ matrix.model }}" == "SM-A546E" ]]; then
               imei="350090711234564"
+          elif [[ "${{ matrix.model }}" == "SM-A546V" ]]; then
+              imei="351783151234560"
           fi
           samfirm -m ${{ matrix.model }} -r ${{ matrix.csc }} -i $imei
 
