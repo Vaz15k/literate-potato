@@ -1,8 +1,13 @@
+## This File is based on:
+## https://github.com/Mesa-Labs-Archive/proprietary_vendor_samsung_a54x/blob/main/.github/workflows/check.yml
+
 name: Upload firmware images
 
 on:
   workflow_dispatch:
-
+  schedule:
+    - cron: "0 12 * * *"
+  
 jobs:
   upload:
     runs-on: ubuntu-latest
@@ -44,12 +49,13 @@ jobs:
 
       - name: Compare latest version with current version
         run: |
-          need_update=0
-          latest=$(curl --retry 5 --retry-delay 5 http://fota-cloud-dn.ospserver.net/firmware/${{ matrix.csc }}/${{ matrix.model }}/version.xml | grep latest | sed 's/^[^>]*>//' | sed 's/<.*//')
-          current=$(cat current.${{ matrix.model }}_${{ matrix.omc }}) || need_update=1
-          [[ $latest != $current ]] && need_update=1
-          echo "latest_version=$latest" >> $GITHUB_ENV
-          echo "need_update=$need_update" >> $GITHUB_ENV
+            need_update=0
+            latest=`curl --retry 5 --retry-delay 5 http://fota-cloud-dn.ospserver.net/firmware/${{ matrix.csc }}/${{ matrix.model }}/version.xml | grep latest | sed 's/^[^>]*>//' | sed 's/<.*//'`
+            current=`cat versions/current.${{ matrix.model }}_${{ matrix.omc }}` || need_update=1
+            [[ $latest != $current ]] && need_update=1
+            mkdir -p versions
+            echo "$latest" >> versions/current.${{ matrix.model }}_${{ matrix.omc }}
+            echo "need_update=$need_update" >> $GITHUB_ENV
 
       - name: Set up Node.js
         if: env.need_update == 1
@@ -70,6 +76,14 @@ jobs:
           sudo apt-get install -y liblz4-tool zip f2fs-tools
           sudo wget -O /usr/bin/samfirm https://github.com/DavidArsene/samfirm.js/releases/download/v0.3.0/samfirm.js && sudo chmod +x /usr/bin/samfirm
 
+      - name: Cleanup space
+        if: env.need_update == 1
+        run: |
+          sudo apt-get remove --purge -y "php*" "dotnet*" "mysql*" "clang*" "google*"
+          sudo apt-get autoremove -y
+          sudo apt-get clean
+          sudo rm -rf /usr/local
+          
       - name: Fetch firmware
         if: env.need_update == 1
         run: |
@@ -101,8 +115,8 @@ jobs:
         if: env.need_update == 1
         run: |
           mkdir -p Imagens/${{ matrix.model }}
-          tar xvf ${{ env.ap_tar }} --wildcards '*.img.lz4'
           for img in recovery boot init_boot; do
+            tar xvf ${{ env.ap_tar }} --wildcards ${img}.img.lz4
             lz4 -d ${img}.img.lz4 ${img}.img
             mv ${img}.img Imagens/${{ matrix.model }}
             rm ${img}.img.lz4
@@ -114,6 +128,8 @@ jobs:
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git pull origin ${{github.ref}} --ff-only
+          git add versions/current.${{ matrix.model }}_${{ matrix.omc }}
+          git commit -m "Updated the latest version of ${{ matrix.model }}"
           git add Imagens/${{ matrix.model }}
-          git commit -m "Upload ${{matrix.model}} images"
+          git commit -m "Upload ${{ matrix.model }} images"
           git push origin ${{github.ref}}
