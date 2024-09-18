@@ -54,6 +54,11 @@ jobs:
             current=`cat versions/current.${{ matrix.model }}_${{ matrix.omc }}` || need_update=1
             [[ $latest != $current ]] && need_update=1
             mkdir -p versions
+
+            if [[ -f versions/current.${{ matrix.model }}_${{ matrix.omc }} ]]; then
+                rm versions/current.${{ matrix.model }}_${{ matrix.omc }}
+            fi
+
             echo "$latest" >> versions/current.${{ matrix.model }}_${{ matrix.omc }}
             echo "need_update=$need_update" >> $GITHUB_ENV
 
@@ -128,8 +133,11 @@ jobs:
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git pull origin
+          
           git add versions/current.${{ matrix.model }}_${{ matrix.omc }}
           git commit -m "Updated the latest version of ${{ matrix.model }}"
+          
           git add Imagens/${{ matrix.model }}
           git commit -m "Upload ${{ matrix.model }} images"
+          
           git push origin ${{github.ref}}
