@@ -120,7 +120,7 @@ jobs:
         if: env.need_update == 1
         run: |
           mkdir -p Imagens/${{ matrix.model }}
-          for img in recovery boot init_boot; do
+          for img in recovery boot init_boot vendor_boot; do
             tar xvf ${{ env.ap_tar }} --wildcards ${img}.img.lz4
             lz4 -d ${img}.img.lz4 ${img}.img
             mv ${img}.img Imagens/${{ matrix.model }}
