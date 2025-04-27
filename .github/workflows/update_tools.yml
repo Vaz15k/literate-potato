@@ -1,0 +1,116 @@
+name: Atualizar Ferramentas de Modificação
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * *"  # Executar diariamente à meia-noite
+
+jobs:
+  update-tools:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Criar diretórios necessários
+        run: |
+          mkdir -p Tools
+          mkdir -p versions
+
+      # Verificar e atualizar Magisk
+      - name: Verificar versão atual do Magisk
+        run: |
+          need_update_magisk=0
+          if [ -f versions/current.magiskboot ]; then
+            current_magisk=$(cat versions/current.magiskboot)
+            echo "current_magisk=$current_magisk" >> $GITHUB_ENV
+          else
+            need_update_magisk=1
+          fi
+          echo "need_update_magisk=$need_update_magisk" >> $GITHUB_ENV
+
+      - name: Obter última versão do Magisk
+        run: |
+          latest_magisk=$(curl -s https://api.github.com/repos/topjohnwu/Magisk/releases/latest | jq -r '.tag_name')
+          echo "latest_magisk=$latest_magisk" >> $GITHUB_ENV
+          if [[ "$latest_magisk" != "${{ env.current_magisk }}" ]]; then
+            echo "need_update_magisk=1" >> $GITHUB_ENV
+          fi
+
+      - name: Baixar e extrair magiskboot
+        if: env.need_update_magisk == 1
+        run: |
+          # Baixar Magisk
+          wget -q https://github.com/topjohnwu/Magisk/releases/download/${{ env.latest_magisk }}/Magisk-${{ env.latest_magisk }}.apk -O magisk.apk
+          
+          # Extrair magiskboot para Linux
+          mkdir -p temp_magisk
+          unzip -j magisk.apk "lib/x86_64/libmagiskboot.so" -d temp_magisk
+          mv temp_magisk/libmagiskboot.so Tools/magiskboot
+          chmod +x Tools/magiskboot
+          
+          # Extrair magiskboot para Android
+          unzip -j magisk.apk "lib/arm64-v8a/libmagiskboot.so" -d temp_magisk
+          mv temp_magisk/libmagiskboot.so Tools/magiskboot_android
+          chmod +x Tools/magiskboot_android
+          
+          # Limpar
+          rm -rf temp_magisk magisk.apk
+          
+          # Atualizar versão
+          echo "${{ env.latest_magisk }}" > versions/current.magiskboot
+
+      # Verificar e atualizar KernelSU
+      - name: Verificar versão atual do KernelSU
+        run: |
+          need_update_ksud=0
+          if [ -f versions/current.ksud ]; then
+            current_ksud=$(cat versions/current.ksud)
+            echo "current_ksud=$current_ksud" >> $GITHUB_ENV
+          else
+            need_update_ksud=1
+          fi
+          echo "need_update_ksud=$need_update_ksud" >> $GITHUB_ENV
+
+      - name: Obter última versão do KernelSU
+        run: |
+          latest_ksud=$(curl -s https://api.github.com/repos/tiann/KernelSU/releases/latest | jq -r '.tag_name')
+          echo "latest_ksud=$latest_ksud" >> $GITHUB_ENV
+          if [[ "$latest_ksud" != "${{ env.current_ksud }}" ]]; then
+            echo "need_update_ksud=1" >> $GITHUB_ENV
+          fi
+
+      - name: Baixar ksud
+        if: env.need_update_ksud == 1
+        run: |
+          # Baixar ksud para Android (arm64)
+          wget -q https://github.com/tiann/KernelSU/releases/download/${{ env.latest_ksud }}/ksud-aarch64-linux-android -O Tools/ksud_android
+          chmod +x Tools/ksud_android
+          
+          # Baixar ksud para Linux (x86_64)
+          wget -q https://github.com/tiann/KernelSU/releases/download/${{ env.latest_ksud }}/ksud-x86_64-unknown-linux-musl -O Tools/ksud
+          chmod +x Tools/ksud
+          
+          # Atualizar versão
+          echo "${{ env.latest_ksud }}" > versions/current.ksud
+
+      - name: Commit mudanças
+        if: env.need_update_magisk == 1 || env.need_update_ksud == 1
+        run: |
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          if [[ "${{ env.need_update_magisk }}" == "1" ]]; then
+            git add Tools/magiskboot Tools/magiskboot_android versions/current.magiskboot
+            git commit -m "Atualizar magiskboot para versão ${{ env.latest_magisk }}"
+          fi
+          
+          if [[ "${{ env.need_update_ksud }}" == "1" ]]; then
+            git add Tools/ksud Tools/ksud_android versions/current.ksud
+            git commit -m "Atualizar ksud para versão ${{ env.latest_ksud }}"
+          fi
+          
+          git push origin ${{github.ref}}
