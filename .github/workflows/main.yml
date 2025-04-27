@@ -134,10 +134,7 @@ jobs:
           git config --local user.name "github-actions[bot]"
           git pull origin
           
-          git add versions/current.${{ matrix.model }}_${{ matrix.omc }}
-          git commit -m "Updated the latest version of ${{ matrix.model }}"
-          
-          git add Imagens/${{ matrix.model }}
-          git commit -m "Upload ${{ matrix.model }} images"
+          git add versions/current.${{ matrix.model }}_${{ matrix.omc }} Imagens/${{ matrix.model }}
+          git commit -m "Upload ${{ matrix.model }} images and update version"
           
           git push origin ${{github.ref}}
